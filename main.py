@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException, Query, BackgroundTasks
-from google import generativeai as genai
+import google.generativeai as genai
 import uvicorn
 import requests
 import json
