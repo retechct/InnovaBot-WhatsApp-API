@@ -1,0 +1,5 @@
+
+tunnel: <cloudflared tunnel create innova-bot-tunnel>
+credentials-file: C:\Users\retec\.cloudflared\<UUID_DEL_TUNEL>.json
+ingress:
+  - service: http://localhost:8002
