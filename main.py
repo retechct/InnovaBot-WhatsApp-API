@@ -3,7 +3,7 @@ import google.generativeai as genai
 import uvicorn
 import requests
 import json
-import os # Necesitas esta librería para leer variables de entorno
+import os 
 
 app = FastAPI()
 
@@ -11,9 +11,9 @@ app = FastAPI()
 # NOTA: En producción, estos valores se leerán de las Variables de Entorno de Render.
 
 # Lee las variables de entorno para las claves. Si no las encuentra (ej: en local), usa un valor por defecto.
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "TU_CLAVE_GEMINI_AQUI")
-WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "TU_TOKEN_WHATSAPP_AQUI")
-PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID", "911239725403166") 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
+PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID") 
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "Guarana1z")
 
 # --- CONFIGURACIÓN GEMINI ---
