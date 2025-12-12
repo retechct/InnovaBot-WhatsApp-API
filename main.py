@@ -12,7 +12,7 @@ app = FastAPI()
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID") 
-VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "Guarana1z")
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN",)
 
 # --- CONFIGURACIÓN GEMINI ---
 genai.configure(api_key=GEMINI_API_KEY)
@@ -64,7 +64,7 @@ def procesar_mensaje(telefono_cliente, nombre_cliente, texto_usuario):
         respuesta_bot = response.text
 
         # 3. Enviar a WhatsApp
-        url = f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages"
+        url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
         headers = {
             "Authorization": f"Bearer {WHATSAPP_TOKEN}",
             "Content-Type": "application/json"
