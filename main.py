@@ -6,8 +6,6 @@ import json
 import os 
 
 app = FastAPI()
-
-# --- ACTUALIZA ESTO CON TUS NUEVAS CLAVES ---
 # NOTA: En producción, estos valores se leerán de las Variables de Entorno de Render.
 
 # Lee las variables de entorno para las claves. Si no las encuentra (ej: en local), usa un valor por defecto.
