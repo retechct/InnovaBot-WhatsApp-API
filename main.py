@@ -6,38 +6,34 @@ import json
 import os 
 
 app = FastAPI()
-# NOTA: En producción, estos valores se leerán de las Variables de Entorno de Render.
 
-# Lee las variables de entorno para las claves. Si no las encuentra (ej: en local), usa un valor por defecto.
+# Configuración desde variables de entorno
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID") 
-VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN",)
+VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
 
 # --- CONFIGURACIÓN GEMINI ---
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')
+# Nota: Asegúrate que el modelo sea 'gemini-1.5-flash' o el que tengas habilitado
+model = genai.GenerativeModel('gemini-1.5-flash')
 
-# Variables globales
 chat_sessions = {}
-# Esta lista de vendedores deberá ser cargada desde una base de datos o variable de entorno en un entorno real.
-telefonos_vendedores = ["51937065891", "51902266061","51930462599","51950159000","51978738558","51926855419","51940080847","51946763654","51987122022","51912018611","51910221011","51935359873","51925277455"] 
+telefonos_vendedores = [
+    "51937065891", "51902266061","51930462599","51950159000","51978738558",
+    "51926855419","51940080847","51946763654","51987122022","51912018611",
+    "51910221011","51935359873","51925277455"
+] 
 
-# --- FUNCIÓN DE PROCESAMIENTO (SE EJECUTA EN 2DO PLANO) ---
-# Hemos incluido la lógica de ROL (Vendedor vs. Cliente) en esta versión para ser completa.
 def procesar_mensaje(telefono_cliente, nombre_cliente, texto_usuario):
-    print(f"🤖 Procesando mensaje para {nombre_cliente}...")
+    # El flush=True es vital para ver el log en Render inmediatamente
+    print(f"🤖 Procesando mensaje para {nombre_cliente}...", flush=True)
     
     try:
-        # Determinar el ROL del usuario
         es_vendedor = telefono_cliente in telefonos_vendedores
         
-        # 1. Inicializar Historial de Chat
         if telefono_cliente not in chat_sessions:
-            
-            # Definir Contexto según el ROL
             if es_vendedor:
-                # CONTEXTO ASISTENTE INTERNO
                 CONTEXTO = """
                 Eres InnovaBot, el asistente interno exclusivo para el equipo de ventas de Innova Mobili.
                 Tu rol es dar información precisa, técnica y confidencial solo a los vendedores.
@@ -45,7 +41,6 @@ def procesar_mensaje(telefono_cliente, nombre_cliente, texto_usuario):
                 """
                 mensaje_inicial = "Entendido. Iniciando sesión como asistente interno."
             else:
-                # CONTEXTO CLIENTE FINAL
                 CONTEXTO = """
                 Eres InnovaBot, experto en muebles de Innova Mobili.
                 Sé breve, amable y persuade a la venta.
@@ -53,18 +48,19 @@ def procesar_mensaje(telefono_cliente, nombre_cliente, texto_usuario):
                 mensaje_inicial = "Entendido, soy InnovaBot."
                 
             chat_sessions[telefono_cliente] = model.start_chat(history=[
-                {"role": "user", "parts": CONTEXTO},
-                {"role": "model", "parts": mensaje_inicial}
+                {"role": "user", "parts": [CONTEXTO]},
+                {"role": "model", "parts": [mensaje_inicial]}
             ])
         
         chat = chat_sessions[telefono_cliente]
         
-        # 2. Preguntar a Gemini
+        # Generar respuesta con Gemini
         response = chat.send_message(texto_usuario)
         respuesta_bot = response.text
+        print(f"🧠 Respuesta generada para {telefono_cliente}: {respuesta_bot[:50]}...", flush=True)
 
-        # 3. Enviar a WhatsApp
-        url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
+        # Enviar a WhatsApp (v22.0 o v18.0 son recomendadas)
+        url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
         headers = {
             "Authorization": f"Bearer {WHATSAPP_TOKEN}",
             "Content-Type": "application/json"
@@ -79,51 +75,52 @@ def procesar_mensaje(telefono_cliente, nombre_cliente, texto_usuario):
         envio = requests.post(url, headers=headers, json=data)
         
         if envio.status_code == 200:
-            print(f" Mensaje enviado a {telefono_cliente}")
+            print(f"✅ Mensaje ENVIADO exitosamente a {telefono_cliente}", flush=True)
         else:
-            print(f" ERROR WHATSAPP: {envio.status_code} - {envio.text}")
+            print(f"❌ ERROR AL ENVIAR WHATSAPP: {envio.status_code} - {envio.text}", flush=True)
 
     except Exception as e:
-        print(f" Error en la lógica del bot: {e}")
+        print(f"🔥 Error CRÍTICO en la lógica del bot: {str(e)}", flush=True)
 
 
 @app.get("/webhook")
-async def verify_webhook(mode: str = Query(alias="hub.mode"),
-                         token: str = Query(alias="hub.verify_token"),
-                         challenge: str = Query(alias="hub.challenge")):
+async def verify_webhook(mode: str = Query(None, alias="hub.mode"),
+                         token: str = Query(None, alias="hub.verify_token"),
+                         challenge: str = Query(None, alias="hub.challenge")):
     if mode == "subscribe" and token == VERIFY_TOKEN:
-        # Asegúrate de que el token recibido coincida con el token de verificación
+        print("✅ Webhook verificado correctamente por Meta", flush=True)
         return int(challenge)
-    raise HTTPException(status_code=403, detail="Token incorrecto")
+    raise HTTPException(status_code=403, detail="Token de verificación inválido")
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
-    # El resto de la función POST queda igual, ya que maneja la lógica de Meta.
     try:
-        data = await request.json()
+        body = await request.json()
         
-        entry = data["entry"][0]
-        changes = entry["changes"][0]
-        value = changes["value"]
-        
-        if "messages" in value:
+        # Verificar que sea un mensaje de WhatsApp
+        if "entry" in body and body["entry"][0]["changes"][0]["value"].get("messages"):
+            value = body["entry"][0]["changes"][0]["value"]
             message_data = value["messages"][0]
+            
             telefono_cliente = message_data["from"]
-            texto_usuario = message_data["text"]["body"]
- 
+            texto_usuario = message_data.get("text", {}).get("body", "")
+            
+            # Obtener nombre del perfil
             profile = value.get("contacts", [{}])[0].get("profile", {})
             nombre_cliente = profile.get("name", "Cliente")
 
-            print(f"Recibido de {nombre_cliente}: {texto_usuario}")
+            print(f"📩 NUEVO MENSAJE: De {nombre_cliente} ({telefono_cliente}): {texto_usuario}", flush=True)
 
+            # Ejecutar lógica pesada en segundo plano
             background_tasks.add_task(procesar_mensaje, telefono_cliente, nombre_cliente, texto_usuario)
             
-        return {"status": "received"}
+            return {"status": "received"}
+        
+        return {"status": "event_ignored"}
 
     except Exception as e:
-        # Esto ignora otros eventos que no son mensajes, como lecturas o estados.
-        return {"status": "ignored"}
+        print(f"⚠️ Error procesando JSON entrante: {e}", flush=True)
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
-    # Render usará el puerto 10000. Esto es solo para pruebas locales.
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
