@@ -16,7 +16,7 @@ VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
 # --- CONFIGURACIÓN GEMINI ---
 genai.configure(api_key=GEMINI_API_KEY)
 # Nota: Asegúrate que el modelo sea 'gemini-1.5-flash' o el que tengas habilitado
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 chat_sessions = {}
 telefonos_vendedores = [
