@@ -64,7 +64,7 @@ def procesar_mensaje(telefono_cliente, nombre_cliente, texto_usuario):
         respuesta_bot = response.text
 
         # 3. Enviar a WhatsApp
-        url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
+        url = f"https://graph.facebook.com/v24.0/{PHONE_NUMBER_ID}/messages"
         headers = {
             "Authorization": f"Bearer {WHATSAPP_TOKEN}",
             "Content-Type": "application/json"
