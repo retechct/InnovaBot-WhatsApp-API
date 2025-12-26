@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, BackgroundTasks
+from fastapi.responses import PlainTextResponse
 from google import genai
 import os
 import requests
@@ -8,18 +9,18 @@ app = FastAPI()
 # ===============================
 # VARIABLES DE ENTORNO
 # ===============================
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
-PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
-VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN")
+GEMINI_API_KEY = "AIzaSyDpDSoV9me-22A9W-9UyrSi4dDqH1fR91Q"
+WHATSAPP_TOKEN = "EAAXeWdWIwHIBQTyb79jfXmjVWoo0MLSgzEGCuElVdPtq26h34rEXuc0BRMrqUrzE6jZCZBjjyI7hdlZBHnZCtZCtdfGEdaFJUIRSgbJ4UHQNRdU57UsqI0VleZAwZBJYlZA8v1BZAZAsQgr0pMRzIFFZBZC5mJZBWALQ08xhWAcrAZCaX6y7arFtAxM2RioSYEZC70PZAP2ZBmQZDZD"
+PHONE_NUMBER_ID = "962569226933249" 
+VERIFY_TOKEN = "1525" 
 
 # ===============================
-# CLIENTE GEMINI (LIBRERÍA NUEVA)
+# CLIENTE GEMINI 3 (NUEVA GENERACIÓN)
 # ===============================
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ===============================
-# LISTA DE VENDEDORES
+# TU ROTADOR DE VENDEDORES
 # ===============================
 telefonos_vendedores = [
     "51937065891", "51902266061", "51930462599", "51950159000", "51978738558",
@@ -42,86 +43,59 @@ def enviar_a_whatsapp(telefono: str, texto: str):
         "type": "text",
         "text": {"body": texto}
     }
-
     r = requests.post(url, headers=headers, json=data)
     print(f"📤 WhatsApp: {r.status_code} - {r.text}", flush=True)
 
 # ===============================
-# PROCESAMIENTO IA
+# PROCESAMIENTO CON GEMINI 3 PRO PREVIEW
 # ===============================
 def procesar_ia(telefono_cliente: str, nombre_cliente: str, texto_usuario: str):
     try:
         es_vendedor = telefono_cliente in telefonos_vendedores
+        contexto = (
+            f"Eres InnovaBot con Gemini 3, asistente interno para el vendedor {nombre_cliente}. Da precios técnicos."
+            if es_vendedor else 
+            f"Eres InnovaBot con Gemini 3, experto en muebles para el cliente {nombre_cliente}. Sé muy persuasivo."
+        )
 
-        if es_vendedor:
-            contexto = (
-                f"Eres InnovaBot, asistente INTERNO para el vendedor {nombre_cliente}. "
-                "Da información técnica, precios internos y cuentas BCP: 194-2550181-0-51."
-            )
-        else:
-            contexto = (
-                f"Eres InnovaBot, experto en muebles para el cliente {nombre_cliente}. "
-                "Sé amable, claro y persuade a la venta."
-            )
-
+        # USANDO EL ÚLTIMO MODELO GEMINI 3 PRO PREVIEW
         response = client.models.generate_content(
-            model="gemini-3-pro-preview",
+            model="gemini-3-pro-preview", 
             contents=f"Contexto: {contexto}\nUsuario dice: {texto_usuario}"
         )
 
-        # Seguridad: algunas respuestas no traen .text
         respuesta = response.text if hasattr(response, "text") else str(response)
-
         enviar_a_whatsapp(telefono_cliente, respuesta)
 
     except Exception as e:
-        print(f"🔥 Error en procesamiento IA: {e}", flush=True)
+        print(f"🔥 Error en IA Gemini 3: {e}", flush=True)
 
 # ===============================
-# RUTA RAÍZ (OPCIONAL)
+# VERIFICACIÓN WEBHOOK (TEXTO PLANO PARA META)
 # ===============================
-@app.get("/")
-def home():
-    return {"status": "InnovaBot activo"}
+@app.get("/webhook", response_class=PlainTextResponse)
+async def verify(request: Request):
+    params = request.query_params
+    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == VERIFY_TOKEN:
+        print("✅ Webhook verificado con Gemini 3", flush=True)
+        return params.get("hub.challenge")
+    return "Error"
 
 # ===============================
-# VERIFICACIÓN WEBHOOK
-# ===============================
-@app.get("/webhook")
-async def verify(mode: str = None, token: str = None, challenge: str = None):
-    if mode == "subscribe" and token == VERIFY_TOKEN:
-        print("✅ Webhook verificado", flush=True)
-        return int(challenge)
-
-# ===============================
-# RECEPCIÓN DE MENSAJES
+# RECEPCIÓN DE MENSAJES REALES
 # ===============================
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
     data = await request.json()
-
-    try:
+    if "entry" in data:
         value = data["entry"][0]["changes"][0]["value"]
-
         if "messages" in value:
-            msg_obj = value["messages"][0]
-
-            telefono = msg_obj["from"]
-            texto = msg_obj["text"]["body"]
-
-            profile = value.get("contacts", [{}])[0].get("profile", {})
-            nombre = profile.get("name", "Cliente")
-
-            print(f"📩 Mensaje de {nombre} ({telefono}): {texto}", flush=True)
-
-            background_tasks.add_task(
-                procesar_ia,
-                telefono,
-                nombre,
-                texto
-            )
-
-    except Exception as e:
-        print(f"⚠️ Error webhook: {e}", flush=True)
-
+            msg = value["messages"][0]
+            nombre = value.get("contacts", [{}])[0].get("profile", {}).get("name", "Cliente")
+            print(f"📩 Mensaje de {nombre} ({msg['from']}): {msg['text']['body']}", flush=True)
+            background_tasks.add_task(procesar_ia, msg["from"], nombre, msg["text"]["body"])
     return {"status": "ok"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
